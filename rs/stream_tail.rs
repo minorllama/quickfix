@@ -1,5 +1,33 @@
+// #![feature(explicit_tail_calls)] // only works on nightly (and not stable) rustc
+
 use std::io::{self, BufRead};
 use std::env;
+
+/* trying out `become` and tco in rust
+// uses `become` for tail call optimization
+#[expect(incomplete_features)]
+fn log_buffer(buf:&[String], size:usize, idx:usize, depth:usize){
+    if depth < size {
+        eprintln!("{}", buf[idx]);
+        become log_buffer(buf, size, (idx+1)%size, depth+1);
+    }
+}
+*/
+
+// loop version; keep the same signature as tco version
+fn log_buffer(buf:&[String], size:usize, mut idx:usize, mut depth:usize){
+    loop {
+        if depth >= size {
+            break;
+        } else {
+            idx = idx % size;
+            eprintln!("{}", buf[idx]);
+            idx += 1;
+            depth += 1;
+        } 
+    }
+
+}
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -13,7 +41,7 @@ fn main() {
     let n:usize = head.parse().unwrap();
     let mut buffer = vec![String::new(); n];
     let mut head = 0;  
-    let mut count = n; 
+    let mut count = 0; 
 
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
@@ -21,8 +49,8 @@ fn main() {
             Ok(e) => {
                 buffer[head] = e; // add at head
                 head = (head + 1) % n; // circular indexing
-                if count > 0 {
-                    count -= 1;
+                if count < n {
+                    count += 1;
                 }
             }
             Err(err) => {
@@ -33,7 +61,21 @@ fn main() {
     }
     
     
-    for line in buffer {
-        eprintln!("{}", line);
+    // assuming there were at least n element
+    // since head was incremented, it's pointing to start of the n to last element.
+    // if less than n elements were in the stream, the idexing is mod count
+    if count == n {
+        log_buffer(&buffer, n, head % n, 0)
+    } else {
+        log_buffer(&buffer, count, head % count, 0)
     }
+    /* 
+    $ seq 2 | ./stream_tail 3
+      1
+      2
+    $ seq 100 | ./stream_tail 3
+      98
+      99
+      100
+    */
 }
